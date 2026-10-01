@@ -11,9 +11,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
   html, body { margin: 0; height: 100%; font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; background: #f4f4f2; color: #222; }
-  #map { position: absolute; inset: 0; background: #f2efe9; }
-  /* 바탕지도: 링크의 지도와 같은 OpenStreetMap + 같은 색 보정 */
-  .basetiles { filter: saturate(.35) brightness(1.04) contrast(.92); }
+  #map { position: absolute; inset: 0; background: #f7f6f3; }
+  /* 바탕지도: OpenStreetMap을 흐리게 (채도·대비를 낮추고 반투명) */
+  .basetiles { filter: saturate(.2) brightness(1.1) contrast(.8) opacity(.6); }
 
   .panel { position: absolute; z-index: 1000; top: 12px; left: 12px; width: 290px; max-width: calc(100vw - 48px);
     max-height: calc(100vh - 24px); overflow-y: auto; box-sizing: border-box;
@@ -166,7 +166,7 @@ const dongLayer = L.geoJSON(DONGS, {
 map.fitBounds(dongLayer.getBounds(), { padding: [8, 8] });
 
 // ---- 행정동별 업소 수(영업중) 색칠 지도 ----
-const CHORO = [   // 0곳은 색칠하지 않음
+const CHORO = [   // 0곳은 흰색 (아래 style에서 처리)
   { min: 1, max: 14, color: "#fdd0a2" },
   { min: 15, max: 43, color: "#fdae6b" },
   { min: 44, max: 100, color: "#fd8d3c" },
@@ -178,13 +178,13 @@ const choroLayer = L.geoJSON(DONGS, {
   renderer: svgChoro, interactive: false,
   style: f => {
     const c = choroClass(f.properties.cnt["영업중"]);
-    return c ? { stroke: false, fillColor: c.color, fillOpacity: 0.55 } : { stroke: false, fillOpacity: 0 };
+    return { stroke: false, fillColor: c ? c.color : "#ffffff", fillOpacity: 0.55 };   // 0곳은 흰색
   }
 });
 const dongN = n => DONGS.features.filter(f => { const c = choroClass(f.properties.cnt["영업중"]); return c && c.min === n.min; }).length;
 document.getElementById("lgChoro").innerHTML =
   CHORO.map(c => `<div class="lg-row"><span class="sw" style="background:${c.color};opacity:.8"></span>${c.max === Infinity ? fmt(c.min) + "곳 이상" : c.min + "–" + c.max + "곳"}<span style="margin-left:auto;color:#999">${dongN(c)}개 동</span></div>`).join("") +
-  `<div class="lg-row"><span class="sw" style="background:transparent"></span>0곳 (색 없음)<span style="margin-left:auto;color:#999">${DONGS.features.filter(f => f.properties.cnt["영업중"] === 0).length}개 동</span></div>` +
+  `<div class="lg-row"><span class="sw" style="background:#ffffff;border-color:rgba(0,0,0,.25)"></span>0곳<span style="margin-left:auto;color:#999">${DONGS.features.filter(f => f.properties.cnt["영업중"] === 0).length}개 동</span></div>` +
   `<div class="note">필터와 상관없이 영업중 업소 전체 기준이에요.</div>`;
 
 // ---- 반경 200m 밀집지역 원 ----
