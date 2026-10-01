@@ -13,7 +13,7 @@
   html, body { margin: 0; height: 100%; font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; background: #f4f4f2; color: #222; }
   #map { position: absolute; inset: 0; background: #f7f6f3; }
   /* 바탕지도: OpenStreetMap을 흐리게 (채도·대비를 낮추고 반투명) */
-  .basetiles { filter: saturate(.2) brightness(1.1) contrast(.8) opacity(.6); }
+  .basetiles { filter: saturate(.22) brightness(1.098) contrast(.82) opacity(.62); }
 
   .panel { position: absolute; z-index: 1000; top: 12px; left: 12px; width: 290px; max-width: calc(100vw - 48px);
     max-height: calc(100vh - 24px); overflow-y: auto; box-sizing: border-box;
@@ -48,7 +48,7 @@
   .lg-row { display: flex; align-items: center; gap: 7px; font-size: 11.5px; color: #444; padding: 1px 0; font-variant-numeric: tabular-nums; }
   .sw { width: 18px; height: 11px; border-radius: 2px; flex: none; border: 1px solid rgba(0,0,0,.12); }
   .sw.circle { width: 12px; height: 12px; border-radius: 50%; }
-  .legend .note { font-size: 11px; color: #888; margin-top: 2px; line-height: 1.4; }
+  .cat-body .note { font-size: 11px; color: #888; margin-top: 2px; line-height: 1.4; }
   .msg { font-size: 11.5px; color: #666; line-height: 1.5; border-top: 1px solid #e3e3e3; padding-top: 8px; margin-top: 4px; }
   .toggle-btn { display: none; }
 
@@ -77,27 +77,30 @@
 <div id="map"></div>
 <div class="panel" id="panel">
   <button class="toggle-btn" id="toggleBtn">접기</button>
-  <h1>서울 외국인관광도시민박업</h1>
+  <h1>외국인관광도시민박업</h1>
   <div class="body">
-    <div class="sub">점 하나가 업소 하나예요. 점을 누르면 상세 정보가, 동 위에 마우스를 올리면 동 이름과 업소 수가 나와요.</div>
-    <div class="showing">지도에 표시 중: <b id="shownCnt">0</b>곳 / 전체 <span id="allCnt">0</span>곳</div>
+    <div class="showing">지도에 표시 중: <b id="shownCnt">0</b>개소 / 전체 <span id="allCnt">0</span>개소</div>
     <div id="cats"></div>
 
-    <div class="cat" id="layerCat">
-      <div class="cat-head"><h2>지도 레이어</h2></div>
+    <div class="cat closed" id="catChoro">
+      <div class="cat-head"><button class="fold" title="펼치기/접기">▼</button><h2>행정동별 업소 수(영업중)</h2><span class="cat-sum"></span><span class="links"><button data-a="1">전체</button>·<button data-a="0">해제</button></span></div>
+      <div class="cat-body"></div>
+    </div>
+    <div class="cat closed" id="catClus">
+      <div class="cat-head"><button class="fold" title="펼치기/접기">▼</button><h2>반경 200미터 밀집지역</h2><span class="cat-sum"></span><span class="links"><button data-a="1">전체</button>·<button data-a="0">해제</button></span></div>
+      <div class="cat-body"></div>
+    </div>
+    <div class="cat closed" id="layerCat">
+      <div class="cat-head"><button class="fold" title="펼치기/접기">▼</button><h2>지도 레이어</h2></div>
       <div class="cat-body">
         <label class="row"><input type="checkbox" id="chkDong" checked> 행정동 경계선</label>
         <label class="row"><input type="checkbox" id="chkLabel" checked> 행정동 이름</label>
-        <label class="row"><input type="checkbox" id="chkChoro"> 행정동별 업소 수(영업중)</label>
-        <div class="legend" id="lgChoro"></div>
-        <label class="row"><input type="checkbox" id="chkClus"> 반경 200미터 밀집지역</label>
-        <div class="legend" id="lgClus"></div>
       </div>
     </div>
 
     <div class="msg"><span class="dot approx" style="display:inline-block;vertical-align:-1px;background:#fff"></span>
-      점선 테두리 = 주소로 위치를 찾은 업소 (45곳)<br>
-      위치를 찾지 못해 빠진 업소: 1곳<br>
+      점선 테두리 = 주소로 위치를 찾은 업소 (45개소)<br>
+      위치를 찾지 못해 빠진 업소: 1개소<br>
       자료: 서울시 인허가 정보 (9,154건) · 행정동 경계 2026.7.1 기준 (vuski/admdongkor)</div>
   </div>
 </div>
@@ -136,76 +139,92 @@ CATS.forEach(c => sel[c.id] = new Set(c.items.map(i => i.key)));
 const passes = (pt, except) => CATS.every(c => c.id === except || sel[c.id].has(pt[c.field]));
 
 // ================= 지도 =================
-const map = L.map("map", { preferCanvas: false, maxZoom: 19, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 90 });
+const map = L.map("map", { preferCanvas: false, closePopupOnClick: false, maxZoom: 19, zoomSnap: 0.25, zoomDelta: 0.5, wheelPxPerZoomLevel: 90 });
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 19, className: "basetiles",
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · 행정동 경계: vuski/admdongkor'
 }).addTo(map);
 
-// 층 순서(아래→위): 업소 수 색칠(380) < 경계선(390) < 밀집지역 원(400) < 동 이름(420) < 숙소 점(450)
-[["choro", 380], ["dong", 390], ["clus", 400], ["labels", 420], ["pts", 450]].forEach(([n, z]) => { map.createPane(n).style.zIndex = z; });
-map.getPane("labels").style.pointerEvents = "none";
+// 층 순서(아래→위): 업소 수 색칠(380) < 경계선(390) < 밀집지역 원(400) < 동·원 강조선(410) < 동 이름(420) < 숙소 점(450) < 점 강조(460)
+[["choro", 380], ["dong", 390], ["clus", 400], ["hlArea", 410], ["labels", 420], ["pts", 450], ["hlPt", 460]].forEach(([n, z]) => { map.createPane(n).style.zIndex = z; });
+["labels", "hlArea", "hlPt"].forEach(n => map.getPane(n).style.pointerEvents = "none");
 map.getPane("pts").classList.add("leaflet-pts-pane");
 const svgChoro = L.svg({ pane: "choro" }), svgDong = L.svg({ pane: "dong" }), svgClus = L.svg({ pane: "clus" });
 const ptsRenderer = L.canvas({ pane: "pts", padding: 0.3 });
 
-// ---- 행정동 경계 (툴팁) ----
-const dongLayer = L.geoJSON(DONGS, {
-  renderer: svgDong,
-  style: { color: "#555", weight: 0.8, opacity: 0.75, fillColor: "#ffffff", fillOpacity: 0.01 },
-  onEachFeature: (f, layer) => {
-    const p = f.properties, c = p.cnt;
-    layer.bindTooltip(`<b>${esc(p.gu)} ${esc(p.dong)}</b><br>전체 ${fmt(c.total)}곳 · 영업중 ${fmt(c["영업중"])} · 휴업 ${c["휴업"]} · 폐업 ${fmt(c["폐업"])} · 취소·말소 ${c["취소"]}`,
-      { sticky: true, className: "tip" });
-    layer.on({
-      mouseover: e => e.target.setStyle({ weight: 2.2, color: "#111" }),
-      mouseout: e => dongLayer.resetStyle(e.target),
-    });
-  }
-}).addTo(map);
+// ---- 행정동 경계 ----
+const DONG_STYLE = { color: "#6b6b6b", weight: 0.6, opacity: 0.75, fill: false };
+const dongLayer = L.geoJSON(DONGS, { renderer: svgDong, interactive: false, style: DONG_STYLE }).addTo(map);
 map.fitBounds(dongLayer.getBounds(), { padding: [8, 8] });
 
 // ---- 행정동별 업소 수(영업중) 색칠 지도 ----
-const CHORO = [   // 0곳은 흰색 (아래 style에서 처리)
-  { min: 1, max: 14, color: "#fdd0a2" },
-  { min: 15, max: 43, color: "#fdae6b" },
-  { min: 44, max: 100, color: "#fd8d3c" },
-  { min: 101, max: 223, color: "#e6550d" },
-  { min: 224, max: Infinity, color: "#a63603" },
+const CHORO = [
+  { key: "c0", min: 0, max: 0, color: "#ffffff" },
+  { key: "c1", min: 1, max: 14, color: "#fdd0a2" },
+  { key: "c2", min: 15, max: 43, color: "#fdae6b" },
+  { key: "c3", min: 44, max: 100, color: "#fd8d3c" },
+  { key: "c4", min: 101, max: 223, color: "#e6550d" },
+  { key: "c5", min: 224, max: Infinity, color: "#a63603" },
 ];
 const choroClass = n => CHORO.find(c => n >= c.min && n <= c.max);
-const choroLayer = L.geoJSON(DONGS, {
-  renderer: svgChoro, interactive: false,
-  style: f => {
-    const c = choroClass(f.properties.cnt["영업중"]);
-    return { stroke: false, fillColor: c ? c.color : "#ffffff", fillOpacity: 0.55 };   // 0곳은 흰색
-  }
-});
-const dongN = n => DONGS.features.filter(f => { const c = choroClass(f.properties.cnt["영업중"]); return c && c.min === n.min; }).length;
-document.getElementById("lgChoro").innerHTML =
-  CHORO.map(c => `<div class="lg-row"><span class="sw" style="background:${c.color};opacity:.8"></span>${c.max === Infinity ? fmt(c.min) + "곳 이상" : c.min + "–" + c.max + "곳"}<span style="margin-left:auto;color:#999">${dongN(c)}개 동</span></div>`).join("") +
-  `<div class="lg-row"><span class="sw" style="background:#ffffff;border-color:rgba(0,0,0,.25)"></span>0곳<span style="margin-left:auto;color:#999">${DONGS.features.filter(f => f.properties.cnt["영업중"] === 0).length}개 동</span></div>` +
-  `<div class="note">필터와 상관없이 영업중 업소 전체 기준이에요.</div>`;
+const choroSel = new Set();   // 처음에는 모두 꺼짐
+const choroStyle = f => {
+  const c = choroClass(f.properties.cnt["영업중"]);
+  return { stroke: false, fillColor: c.color, fillOpacity: choroSel.has(c.key) ? 0.55 : 0 };
+};
+const choroLayer = L.geoJSON(DONGS, { renderer: svgChoro, interactive: false, style: choroStyle }).addTo(map);
 
 // ---- 반경 200m 밀집지역 원 ----
 const CLUS = [
-  { min: 20, max: 29, color: "#a09cce" },
-  { min: 30, max: 49, color: "#807dba" },
-  { min: 50, max: 99, color: "#6a51a3" },
-  { min: 100, max: Infinity, color: "#4a1486" },
+  { key: "k1", min: 20, max: 29, color: "#a09cce" },
+  { key: "k2", min: 30, max: 49, color: "#807dba" },
+  { key: "k3", min: 50, max: 99, color: "#6a51a3" },
+  { key: "k4", min: 100, max: Infinity, color: "#4a1486" },
 ];
 const clusClass = n => CLUS.find(c => n >= c.min && n <= c.max);
-const clusLayer = L.layerGroup();
+const clusLayers = Object.fromEntries(CLUS.map(c => [c.key, L.layerGroup()]));
 // 작은 원을 먼저, 큰 원을 나중에 그려서 진한 원이 위에 오도록
 [...CLUSTERS].sort((a, b) => a[2] - b[2]).forEach(([lat, lon, n, gu, dong]) => {
   const c = clusClass(n);
-  L.circle([lat, lon], { radius: 200, renderer: svgClus, color: c.color, weight: 1, opacity: 0.9, fillColor: c.color, fillOpacity: 0.32 })
-    .bindTooltip(`<b>반경 200m 밀집지역</b><br>${esc(gu)} ${esc(dong)} 일대<br>원 안의 영업중 업소: <b>${n}곳</b>`, { sticky: true, className: "tip" })
-    .addTo(clusLayer);
+  const circle = L.circle([lat, lon], { radius: 200, renderer: svgClus, interactive: false, color: c.color, weight: 1.3, opacity: 0.9,
+    dashArray: "2 3", fillColor: c.color, fillOpacity: 0.32 }).addTo(clusLayers[c.key]);
+  circle._info = { lat, lon, n, gu, dong, bin: c.key };
 });
-document.getElementById("lgClus").innerHTML =
-  CLUS.map(c => `<div class="lg-row"><span class="sw circle" style="background:${c.color};opacity:.75;border-color:${c.color}"></span>${c.max === Infinity ? c.min + "곳 이상" : c.min + "–" + c.max + "곳"}<span style="margin-left:auto;color:#999">${CLUSTERS.filter(x => clusClass(x[2]) === c).length}개</span></div>`).join("") +
-  `<div class="note">영업중 업소 기준, 반경 200m 안에 20곳 이상인 곳 (원 ${CLUSTERS.length}개, 중심끼리 200m 이상 간격). 필터와 상관없이 고정이에요.</div>`;
+function restackClus() { CLUS.forEach(c => { if (map.hasLayer(clusLayers[c.key])) { map.removeLayer(clusLayers[c.key]); clusLayers[c.key].addTo(map); } }); }
+
+// ---- 두 레이어 칸: 구간별 체크박스 + 전체·해제 ----
+const rangeLabel = c => c.max === Infinity ? fmt(c.min) + "개소 이상" : c.min === c.max ? c.min + "개소" : c.min + "–" + c.max + "개소";
+function buildLayerCat(boxId, bins, swatch, countText, onToggle, note) {
+  const box = document.getElementById(boxId), body = box.querySelector(".cat-body"), sum = box.querySelector(".cat-sum");
+  const cbs = {};
+  const refresh = () => { const k = bins.filter(b => cbs[b.key].checked).length; sum.textContent = k === 0 ? "(꺼짐)" : k === bins.length ? "(전체)" : `(${k}/${bins.length})`; };
+  bins.forEach(b => {
+    const row = document.createElement("label");
+    row.className = "row";
+    row.innerHTML = `<input type="checkbox">${swatch(b)}<span>${rangeLabel(b)}</span><span class="cnt">${countText(b)}</span>`;
+    const cb = row.querySelector("input"); cbs[b.key] = cb;
+    cb.addEventListener("change", () => { onToggle(b, cb.checked); refresh(); });
+    body.appendChild(row);
+  });
+  body.insertAdjacentHTML("beforeend", `<div class="note">${note}</div>`);
+  box.querySelectorAll(".links button").forEach(btn => btn.addEventListener("click", () => {
+    const on = btn.dataset.a === "1";
+    bins.forEach(b => { if (cbs[b.key].checked !== on) { cbs[b.key].checked = on; onToggle(b, on); } });
+    refresh();
+  }));
+  box.querySelector(".fold").addEventListener("click", () => box.classList.toggle("closed"));
+  refresh();
+}
+buildLayerCat("catChoro", CHORO,
+  b => `<span class="sw" style="background:${b.color};${b.min === 0 ? "border-color:rgba(0,0,0,.25)" : "opacity:.8"}"></span>`,
+  b => DONGS.features.filter(f => choroClass(f.properties.cnt["영업중"]) === b).length + "개 동",
+  (b, on) => { on ? choroSel.add(b.key) : choroSel.delete(b.key); choroLayer.setStyle(choroStyle); },
+  "필터와 상관없이 영업중 업소 전체 기준이에요.");
+buildLayerCat("catClus", CLUS,
+  b => `<span class="sw circle" style="background:${b.color};opacity:.75;border-color:${b.color}"></span>`,
+  b => CLUSTERS.filter(x => clusClass(x[2]) === b).length + "개",
+  (b, on) => { on ? clusLayers[b.key].addTo(map) : map.removeLayer(clusLayers[b.key]); restackClus(); },
+  `영업중 업소 기준, 반경 200m 안에 20개소 이상인 곳 (원 ${CLUSTERS.length}개, 중심끼리 200m 이상 간격). 필터와 상관없이 고정이에요.`);
 
 // ---- 숙소 점 ----
 PT.forEach(o => {
@@ -227,22 +246,96 @@ function popupHtml(o) {
     (p[6] ? `인허가일: ${esc(p[6])}` : "") + (p[7] ? ` · 폐업일: ${esc(p[7])}` : "") +
     (o.approx ? `<br><span class="pop-note">위치: ${esc(p[11])}</span>` : "");
 }
-// 클릭/마우스 위치에서 가장 가까운 표시 중인 점 (반경 7px 안)
-function nearest(latlng) {
+// ================= 커서 인식 · 강조 · 클릭 =================
+// 커서 아래에서 인식하는 순서: 숙소 점 → 밀집지역 원 → 행정동 (위에 그려진 것부터)
+function nearestPoint(latlng) {
   const c = map.latLngToContainerPoint(latlng);
-  let best = null, bd = 49;
+  let best = null, bd = 49;                       // 반경 7px 안
   for (const o of visible) {
     const q = map.latLngToContainerPoint(o.m.getLatLng());
     const d = (q.x - c.x) ** 2 + (q.y - c.y) ** 2;
-    if (d <= bd) { bd = d; best = o; }   // 같은 거리면 나중(위에 그려진) 점
+    if (d <= bd) { bd = d; best = o; }            // 같은 거리면 나중(위에 그려진) 점
   }
   return best;
 }
-map.on("click", e => { const o = nearest(e.latlng); if (o) L.popup({ offset: [0, -2] }).setLatLng(o.m.getLatLng()).setContent(popupHtml(o)).openOn(map); });
-let hoverRaf = 0;
+function circleAt(latlng) {
+  let best = null;
+  CLUS.forEach(c => {
+    if (!map.hasLayer(clusLayers[c.key])) return;
+    clusLayers[c.key].eachLayer(l => {
+      if (map.distance(latlng, l.getLatLng()) <= 200 && (!best || l._info.n >= best._info.n)) best = l;   // 겹치면 업소가 더 많은(위에 그려진) 원
+    });
+  });
+  return best;
+}
+const dongBoxes = DONGS.features.map(f => {
+  const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
+  let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+  polys.forEach(p => p[0].forEach(([x, y]) => { a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); }));
+  return { f, polys, bb: [a, b, c, d] };
+});
+function inRing(x, y, r) { let s = false; for (let i = 0, j = r.length - 1; i < r.length; j = i++) { const [xi, yi] = r[i], [xj, yj] = r[j]; if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) s = !s; } return s; }
+function dongAt(latlng) {
+  // 경계선이나 업소 수 색칠이 켜져 있을 때만 행정동을 인식
+  if (!map.hasLayer(dongLayer) && choroSel.size === 0) return null;
+  const x = latlng.lng, y = latlng.lat;
+  for (const d of dongBoxes) {
+    if (x < d.bb[0] || x > d.bb[2] || y < d.bb[1] || y > d.bb[3]) continue;
+    if (d.polys.some(p => inRing(x, y, p[0]) && !p.slice(1).some(h => inRing(x, y, h)))) return d.f;
+  }
+  return null;
+}
+function targetAt(latlng) {
+  const o = nearestPoint(latlng); if (o) return { kind: "pt", key: "pt" + PT.indexOf(o), o };
+  const c = circleAt(latlng);     if (c) return { kind: "clus", key: "c" + L.stamp(c), c };
+  const f = dongAt(latlng);       if (f) return { kind: "dong", key: "d" + f.properties.code, f };
+  return null;
+}
+
+// 강조 표시: 커서가 가리키는 것 하나만
+const hlPt = L.circleMarker([0, 0], { pane: "hlPt", interactive: false, radius: 6.5, weight: 2.2, color: "#111", fillOpacity: 1 });
+const hlArea = L.layerGroup().addTo(map);
+let hoverKey = null;
+function setHover(t) {
+  const k = t ? t.key : null;
+  if (k === hoverKey) return;
+  hoverKey = k;
+  map.removeLayer(hlPt); hlArea.clearLayers();
+  map.getContainer().classList.toggle("pt-hover", !!t);
+  if (!t) return;
+  if (t.kind === "pt") {
+    hlPt.setLatLng(t.o.m.getLatLng()).setStyle({ fillColor: statusColor[t.o.s], radius: t.o.approx ? 7.5 : 6.5 }).addTo(map);
+  } else if (t.kind === "clus") {
+    L.circle(t.c.getLatLng(), { radius: 200, pane: "hlArea", interactive: false, color: "#2d0a5e", weight: 3, opacity: 1, dashArray: "2 3", fill: false }).addTo(hlArea);
+  } else {
+    L.geoJSON(t.f, { pane: "hlArea", interactive: false, style: { color: "#111", weight: 2.5, opacity: 0.95, fill: false } }).addTo(hlArea);
+  }
+}
+let hoverRaf = 0, lastLL = null;
 map.on("mousemove", e => {
+  lastLL = e.latlng;
   if (hoverRaf) return;
-  hoverRaf = requestAnimationFrame(() => { hoverRaf = 0; map.getContainer().classList.toggle("pt-hover", !!nearest(e.latlng)); });
+  hoverRaf = requestAnimationFrame(() => { hoverRaf = 0; setHover(targetAt(lastLL)); });
+});
+map.on("mouseout", () => setHover(null));
+map.on("zoomstart movestart", () => setHover(null));
+
+// 클릭: 강조된 것의 정보 박스 열기 → 같은 것을 다시 클릭하면 닫기 / 빈 곳 클릭하면 닫기
+const dongHtml = p => { const c = p.cnt; return `<b>${esc(p.gu)} ${esc(p.dong)}</b><br>전체 ${fmt(c.total)}개소<br>` +
+  `영업중 ${fmt(c["영업중"])} · 휴업 ${c["휴업"]} · 폐업 ${fmt(c["폐업"])} · 취소·말소 ${c["취소"]}`; };
+const clusHtml = i => `<b>반경 200m 밀집지역</b><br>${esc(i.gu)} ${esc(i.dong)} 일대<br>원 안의 영업중 업소: <b>${fmt(i.n)}개소</b>`;
+let openKey = null;
+const popup = L.popup({ offset: [0, -2], autoPanPadding: [20, 20] });
+map.on("popupclose", () => { openKey = null; });
+map.on("click", e => {
+  const t = targetAt(e.latlng);
+  if (!t || t.key === openKey) { map.closePopup(); openKey = null; return; }
+  if (t.kind === "pt") popup.setLatLng(t.o.m.getLatLng()).setContent(popupHtml(t.o));
+  else if (t.kind === "clus") popup.setLatLng(e.latlng).setContent(clusHtml(t.c._info));
+  else popup.setLatLng(e.latlng).setContent(dongHtml(t.f.properties));
+  popup.openOn(map);
+  openKey = t.key;
+  setHover(t);
 });
 
 // ================= 속성 박스 =================
@@ -289,7 +382,7 @@ function update() {
     PT.forEach(o => { if (passes(o, c.id)) n[o[c.field]]++; });
     c.items.forEach(it => {
       const e = countEls[c.id][it.key];
-      e.cnt.textContent = fmt(n[it.key]) + "곳";
+      e.cnt.textContent = fmt(n[it.key]) + "개소";
       e.row.classList.toggle("zero", n[it.key] === 0);
     });
     const k = sel[c.id].size;
@@ -368,13 +461,12 @@ map.on("zoomend", sizeLabels);
 sizeLabels();
 
 // ================= 레이어 체크박스 =================
+document.querySelectorAll('#layerCat .fold').forEach(b => b.addEventListener('click', () => b.closest('.cat').classList.toggle('closed')));
 const toggle = (id, layer, after) => document.getElementById(id).addEventListener("change", e => {
   e.target.checked ? layer.addTo(map) : map.removeLayer(layer); if (after && e.target.checked) after();
 });
 toggle("chkDong", dongLayer);
 toggle("chkLabel", labelLayer, sizeLabels);
-toggle("chkChoro", choroLayer);
-toggle("chkClus", clusLayer);
 
 const panel = document.getElementById("panel"), tb = document.getElementById("toggleBtn");
 tb.addEventListener("click", () => { panel.classList.toggle("collapsed"); tb.textContent = panel.classList.contains("collapsed") ? "펼치기" : "접기"; });
