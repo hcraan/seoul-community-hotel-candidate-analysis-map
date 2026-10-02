@@ -191,7 +191,7 @@ L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
 }).addTo(map);
 
 // 층 순서(아래→위): 업소 수 색칠(380) < 경계선(390) < 밀집지역 원(400) < 동·원 강조선(410) < 동 이름(420) < 숙소 점(450) < 점 강조(460)
-[["choro", 380], ["vchoro", 382], ["dong", 390], ["clus", 400], ["vclus", 405], ["hlArea", 410], ["labels", 420], ["vac", 440], ["pts", 450], ["spider", 455], ["hlPt", 460]].forEach(([n, z]) => { map.createPane(n).style.zIndex = z; });
+[["choro", 380], ["vchoro", 382], ["dong", 390], ["labels", 420], ["vac", 440], ["pts", 450], ["clus", 470], ["vclus", 475], ["hlArea", 480], ["spider", 485], ["hlPt", 490]].forEach(([n, z]) => { map.createPane(n).style.zIndex = z; });
 ["labels", "hlArea", "hlPt"].forEach(n => map.getPane(n).style.pointerEvents = "none");
 map.getPane("pts").classList.add("leaflet-pts-pane");
 ["vac", "spider"].forEach(n => map.getPane(n).classList.add("leaflet-pts-pane"));
@@ -228,19 +228,21 @@ const choroStyle = f => {
 const choroLayer = L.geoJSON(DONGS, { renderer: svgChoro, interactive: false, style: choroStyle }).addTo(map);
 
 // ---- 반경 200m 밀집지역 원 ----
+// 반투명 면(0.4) + 같은 색 점선 + 아래 흰 바탕선. 구간은 색의 진하기로 구분, 점보다 위 층(clus/vclus 창)에 그림
 const CLUS = [
-  { key: "k1", min: 20, max: 29, color: "#0b3f86", w: 1.5, lw: 1.2 },
-  { key: "k2", min: 30, max: 49, color: "#0b3f86", w: 2.5, lw: 2 },
-  { key: "k3", min: 50, max: 99, color: "#0b3f86", w: 4.5, lw: 3.5 },
-  { key: "k4", min: 100, max: Infinity, color: "#0b3f86", w: 7, lw: 5 },
+  { key: "k1", min: 20, max: 29, color: "#3a68c4" },
+  { key: "k2", min: 30, max: 49, color: "#24509f" },
+  { key: "k3", min: 50, max: 99, color: "#153a80" },
+  { key: "k4", min: 100, max: Infinity, color: "#0a2560" },
 ];
 const clusClass = n => CLUS.find(c => n >= c.min && n <= c.max);
 const clusLayers = Object.fromEntries(CLUS.map(c => [c.key, L.layerGroup()]));
 // 작은 원을 먼저, 큰 원을 나중에 그려서 진한 원이 위에 오도록
 [...CLUSTERS].sort((a, b) => a[2] - b[2]).forEach(([lat, lon, n, gu, dong]) => {
   const c = clusClass(n);
-  const circle = L.circle([lat, lon], { radius: 200, renderer: svgClus, interactive: false, color: c.color, weight: c.w, opacity: 0.95,
-    fill: false }).addTo(clusLayers[c.key]);
+  L.circle([lat, lon], { radius: 200, renderer: svgClus, interactive: false, color: "#fff", weight: 3.6, opacity: 0.9, fill: false }).addTo(clusLayers[c.key]);
+  const circle = L.circle([lat, lon], { radius: 200, renderer: svgClus, interactive: false, color: c.color, weight: 1.8, opacity: 1, dashArray: "5 4",
+    fill: true, fillColor: c.color, fillOpacity: 0.4 }).addTo(clusLayers[c.key]);
   circle._info = { lat, lon, n, gu, dong, bin: c.key };
 });
 let ptsOn = true;              // 1번(민박업) 전체 켜짐 여부
@@ -278,7 +280,7 @@ buildLayerCat("catChoro", CHORO,
   (b, on) => { on ? choroSel.add(b.key) : choroSel.delete(b.key); choroLayer.setStyle(choroStyle); },
   "필터와 상관없이 영업중 업소 전체 기준이에요.");
 buildLayerCat("catClus", CLUS,
-  b => `<span class="sw circle" style="background:transparent;width:15px;height:15px;border:${b.lw}px solid ${b.color};box-sizing:border-box"></span>`,
+  b => `<span class="sw circle" style="background:${b.color}66;width:15px;height:15px;border:1.6px dashed ${b.color};box-sizing:border-box"></span>`,
   b => CLUSTERS.filter(x => clusClass(x[2]) === b).length + "개",
   (b, on) => { on ? clusSel.add(b.key) : clusSel.delete(b.key); if (ptsOn) { on ? clusLayers[b.key].addTo(map) : map.removeLayer(clusLayers[b.key]); restackClus(); } },
   `영업중 업소 기준, 반경 200m 안에 20개소 이상인 곳 (원 ${CLUSTERS.length}개, 중심끼리 200m 이상 간격). 필터와 상관없이 고정이에요.`);
@@ -304,17 +306,18 @@ const svgVChoro = L.svg({ pane: "vchoro" }), svgVClus = L.svg({ pane: "vclus" })
 const vchoroStyle = f => { const c = vchoroClass(vchoroVal(f)); return { stroke: false, fillColor: c.color, fillOpacity: vchoroSel.has(c.key) ? 0.55 : 0 }; };
 const vchoroLayer = L.geoJSON(DONGS, { renderer: svgVChoro, interactive: false, style: vchoroStyle }).addTo(map);
 const VCLUS = [
-  { key: "w1", min: 10, max: 14, color: "#0b3d1f", w: 1.5, lw: 1.2 },
-  { key: "w2", min: 15, max: 19, color: "#0b3d1f", w: 2.5, lw: 2 },
-  { key: "w3", min: 20, max: 29, color: "#0b3d1f", w: 4.5, lw: 3.5 },
-  { key: "w4", min: 30, max: Infinity, color: "#0b3d1f", w: 7, lw: 5 },
+  { key: "w1", min: 10, max: 14, color: "#3b8f46" },
+  { key: "w2", min: 15, max: 19, color: "#24722f" },
+  { key: "w3", min: 20, max: 29, color: "#155a20" },
+  { key: "w4", min: 30, max: Infinity, color: "#0a3d12" },
 ];
 const vclusClass = n => VCLUS.find(c => n >= c.min && n <= c.max);
 const vclusLayers = Object.fromEntries(VCLUS.map(c => [c.key, L.layerGroup()]));
 [...VCLUSTERS].sort((a, b) => a[2] - b[2]).forEach(([lat, lon, n, gu, dong]) => {
   const c = vclusClass(n);
-  const circle = L.circle([lat, lon], { radius: 200, renderer: svgVClus, interactive: false, color: c.color, weight: c.w, opacity: 0.95,
-    fill: false }).addTo(vclusLayers[c.key]);
+  L.circle([lat, lon], { radius: 200, renderer: svgVClus, interactive: false, color: "#fff", weight: 3.6, opacity: 0.9, fill: false }).addTo(vclusLayers[c.key]);
+  const circle = L.circle([lat, lon], { radius: 200, renderer: svgVClus, interactive: false, color: c.color, weight: 1.8, opacity: 1, dashArray: "5 4",
+    fill: true, fillColor: c.color, fillOpacity: 0.4 }).addTo(vclusLayers[c.key]);
   circle._info = { lat, lon, n, gu, dong, bin: c.key, vac: true };
 });
 function restackVClus() { VCLUS.forEach(c => { if (map.hasLayer(vclusLayers[c.key])) { map.removeLayer(vclusLayers[c.key]); vclusLayers[c.key].addTo(map); } }); }
@@ -324,7 +327,7 @@ buildLayerCat("catVChoro", VCHORO,
   (b, on) => { on ? vchoroSel.add(b.key) : vchoroSel.delete(b.key); vchoroLayer.setStyle(vchoroStyle); },
   "활용 가능 빈집 = 노후 1~2등급 · 단독주택/다가구주택 · 허가 건물 (2,049호). 위 필터와 상관없이 고정이에요.", "호");
 buildLayerCat("catVClus", VCLUS,
-  b => `<span class="sw circle" style="background:transparent;width:15px;height:15px;border:${b.lw}px solid ${b.color};box-sizing:border-box"></span>`,
+  b => `<span class="sw circle" style="background:${b.color}66;width:15px;height:15px;border:1.6px dashed ${b.color};box-sizing:border-box"></span>`,
   b => VCLUSTERS.filter(x => vclusClass(x[2]) === b).length + "개",
   (b, on) => { on ? vclusLayers[b.key].addTo(map) : map.removeLayer(vclusLayers[b.key]); restackVClus(); },
   `활용 가능 빈집 기준, 반경 200m 안에 10호 이상인 곳 (원 ${VCLUSTERS.length}개, 중심끼리 200m 이상 간격). 위 필터와 상관없이 고정이에요.`, "호");
@@ -525,6 +528,7 @@ function circleAt(latlng) {
   [[CLUS, clusLayers], [VCLUS, vclusLayers]].forEach(([bins, layers]) => bins.forEach(c => {
     if (!map.hasLayer(layers[c.key])) return;
     layers[c.key].eachLayer(l => {
+      if (!l._info) return;   // 흰 바탕 테두리용 원은 건너뜀
       if (map.distance(latlng, l.getLatLng()) <= 200 && (!best || (l._info.vac && !best._info.vac) || (l._info.vac === best._info.vac && l._info.n >= best._info.n))) best = l;   // 빈집 원이 위층, 같은 층에선 수가 많은 원
     });
   }));
@@ -586,7 +590,7 @@ function setHover(t) {
   } else if (t.kind === "pt") {
     hlPt.setLatLng(t.o.m.getLatLng()).setStyle({ fillColor: statusColor[t.o.s], radius: t.o.approx ? 7.5 : 6.5 }).addTo(map);
   } else if (t.kind === "clus") {
-    L.circle(t.c.getLatLng(), { radius: 200, pane: "hlArea", interactive: false, color: "#111", weight: 2, opacity: 1, dashArray: "4 3", fill: false }).addTo(hlArea);
+    L.circle(t.c.getLatLng(), { radius: 200, pane: "hlArea", interactive: false, color: "#111", weight: 3, opacity: 1, fill: false }).addTo(hlArea);
   } else {
     L.geoJSON(t.f, { pane: "hlArea", interactive: false, style: { color: "#111", weight: 2.5, opacity: 0.95, fill: false } }).addTo(hlArea);
   }
