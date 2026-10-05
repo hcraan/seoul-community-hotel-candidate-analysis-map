@@ -146,7 +146,7 @@
         <div class="cat closed" id="catS">
           <div class="cat-head"><button class="fold" title="펼치기/접기">▼</button><h2>신속통합기획(재개발)</h2><span class="cat-sum"></span><span class="links"><button data-a="1">전체</button>·<button data-a="0">해제</button></span></div>
           <div class="cat-body"><div class="zsub" style="color:#b0703a">사업 단계</div><div id="sStageRows"></div>
-            <div class="note">서울플랜+('26.9월) 신속통합기획 중 주택정비형 재개발 + 정비사업 정보몽땅 재개발 공모 선정구역 중 경계 미작성지(점) · 163곳<br>아파트·단독주택 재건축 신속통합기획과 도심 도시정비형 재개발은 제외</div></div>
+            <div class="note">서울플랜+('26.9월) 신속통합기획 중 주택정비형 재개발 + 정비사업 정보몽땅 재개발 공모 선정구역 중 경계 미작성지(반경 200m 점선 원) · 163곳<br>아파트·단독주택 재건축 신속통합기획과 도심 도시정비형 재개발은 제외</div></div>
         </div>
         <div class="cat closed" id="catU">
           <div class="cat-head"><button class="fold" title="펼치기/접기">▼</button><h2>도시재생활성화지역</h2><span class="cat-sum"></span><span class="links"><button data-a="1">전체</button>·<button data-a="0">해제</button></span></div>
@@ -734,8 +734,8 @@ const stStyle = f => { const p = f.properties, c = sStage[p.st], on = sShown(p);
   return { color: c.line, weight: 2, opacity: on ? 1 : 0, fillColor: c.fill, fillOpacity: on ? 0.35 : 0 }; };
 const stRenderer = L.svg({ pane: "stzone" });
 const stLayer = L.geoJSON(STZ, { renderer: stRenderer, interactive: false, style: stStyle,
-  pointToLayer: (f, ll) => L.circleMarker(ll, { renderer: stRenderer, radius: 5 }) }).addTo(map);
-const stRestyle = () => stLayer.eachLayer(l => { const st = stStyle(l.feature); if (l.feature.geometry.type === "Point") { st.weight = 1.6; st.fillOpacity = st.opacity ? 1 : 0; } l.setStyle(st); });
+  pointToLayer: (f, ll) => L.circle(ll, { renderer: stRenderer, radius: 200 }) }).addTo(map);   // 경계 미작성: 대표 위치 반경 200m 원(점선)
+const stRestyle = () => stLayer.eachLayer(l => { const st = stStyle(l.feature); if (l.feature.geometry.type === "Point") { st.dashArray = "6 5"; } l.setStyle(st); });
 stRestyle();
 const stBoxes = STZ.features.filter(f => f.geometry.type !== "Point").map(f => {
   const polys = f.geometry.type === "Polygon" ? [f.geometry.coordinates] : f.geometry.coordinates;
@@ -744,11 +744,10 @@ const stBoxes = STZ.features.filter(f => f.geometry.type !== "Point").map(f => {
   return { f, polys, bb: [a, b, c, d] };
 });
 const stPoints = STZ.features.filter(f => f.geometry.type === "Point");
-function zonesAt(latlng) {   // 커서 아래의 사업구역 (겹친 곳은 여러 개: 신통 점 → 관리형 → 신통 면)
+function zonesAt(latlng) {   // 커서 아래의 사업구역 (겹친 곳은 여러 개: 신통 경계 미작성 원 → 관리형 → 신통 면 → 도시재생)
   const c = map.latLngToContainerPoint(latlng);
-  const pts = stPoints.filter(f => sShown(f.properties) && map.latLngToContainerPoint([f.geometry.coordinates[1], f.geometry.coordinates[0]]).distanceTo(c) <= 7);
-  if (pts.length) return pts;
-  return zonesAtPoly(latlng).concat(stBoxes.filter(d => sShown(d.f.properties) && latlng.lng >= d.bb[0] && latlng.lng <= d.bb[2] && latlng.lat >= d.bb[1] && latlng.lat <= d.bb[3] &&
+  const pts = stPoints.filter(f => sShown(f.properties) && latlng.distanceTo([f.geometry.coordinates[1], f.geometry.coordinates[0]]) <= 200);   // 경계 미작성 200m 원 안
+  return pts.concat(zonesAtPoly(latlng)).concat(stBoxes.filter(d => sShown(d.f.properties) && latlng.lng >= d.bb[0] && latlng.lng <= d.bb[2] && latlng.lat >= d.bb[1] && latlng.lat <= d.bb[3] &&
     d.polys.some(p => inRing(latlng.lng, latlng.lat, p[0]) && !p.slice(1).some(h => inRing(latlng.lng, latlng.lat, h)))).map(d => d.f))
     .concat(urBoxes.filter(d => uShown(d.f.properties) && latlng.lng >= d.bb[0] && latlng.lng <= d.bb[2] && latlng.lat >= d.bb[1] && latlng.lat <= d.bb[3] &&
     d.polys.some(p => inRing(latlng.lng, latlng.lat, p[0]) && !p.slice(1).some(h => inRing(latlng.lng, latlng.lat, h)))).map(d => d.f));
@@ -764,7 +763,7 @@ const zoneHtml = fs => fs.map(f => { const p = f.properties;
       `${uType[p.ty]} · ${esc(p.gu)} · ${p.yr}년 선정<br>사업 단계: <b>${c.label}</b> · 면적 약 ${fmt(Math.round(p.a / 100) * 100)}㎡`; }
   if (p.kind === "st") { const c = sStage[p.st];
     return `<b>${esc(p.n)}</b> <span class="pop-status" style="background:${c.line}">신속통합기획</span><br>` +
-      `재개발 · ${esc(p.gu)}<br>사업 단계: <b>${c.label}</b> · 면적 약 ${fmt(Math.round(p.a / 100) * 100)}㎡`; }
+      `재개발 · ${esc(p.gu)}<br>사업 단계: <b>${c.label}</b> · 면적 약 ${fmt(Math.round(p.a / 100) * 100)}㎡` + (f.geometry.type === "Point" ? `<br><span style="color:#888;font-size:12px">경계 미작성 — 대표 위치 반경 200m 원으로 표시</span>` : ""); }
   const c = zType[p.sg];
   return `<b>${esc(p.n)}</b> <span class="pop-status" style="background:${c.line}">${p.sg ? "성곽마을" : "관리형"}</span><br>` +
     `주거환경개선사업(관리형) · ${esc(p.gu)}<br>사업 단계: <b>${zStageLabel[p.st]}</b> · 면적 약 ${fmt(Math.round(p.a / 100) * 100)}㎡`; }).join('<hr style="border:none;border-top:1px solid #eee;margin:6px 0">');
@@ -816,7 +815,7 @@ const zoneHtml = fs => fs.map(f => { const p = f.properties;
   const apply = () => { stRestyle(); setHover(null); refresh(); };
   SSTAGE.forEach(it => {
     const row = document.createElement("label"); row.className = "row";
-    const sw = it.key === "미작성" ? `<i class="zsw" style="width:11px;height:11px;border-radius:50%;border:1.6px solid ${it.line};background:${it.fill}"></i>`
+    const sw = it.key === "미작성" ? `<i class="zsw" style="width:12px;height:12px;border-radius:50%;border:1.8px dashed ${it.line};background:${it.fill}88"></i>`
                                    : `<i class="zsw" style="border:2px solid ${it.line};background:${it.fill}88"></i>`;
     row.innerHTML = `<input type="checkbox" checked>${sw}<span class="rl">${it.label}</span><span class="cnt">${STZ.features.filter(f => f.properties.st === it.key).length}곳</span>`;
     const cb = row.querySelector("input"); cbs.push([cb, it]);
@@ -878,7 +877,7 @@ function setHover(t) {
     L.circle(t.c.getLatLng(), { radius: 200, pane: "hlArea", interactive: false, color: "#111", weight: 3, opacity: 1, fill: false }).addTo(hlArea);
   } else if (t.kind === "zone") {
     t.zs.forEach(f => L.geoJSON(f, { pane: "hlArea", interactive: false, style: { color: "#111", weight: 2.5, opacity: 0.95, fill: false },
-      pointToLayer: (g, ll) => L.circleMarker(ll, { pane: "hlArea", radius: 7, weight: 2.5, color: "#111", fill: false }) }).addTo(hlArea));
+      pointToLayer: (g, ll) => L.circle(ll, { pane: "hlArea", radius: 200, weight: 2.5, color: "#111", dashArray: "6 5", fill: false }) }).addTo(hlArea));
   } else {
     L.geoJSON(t.f, { pane: "hlArea", interactive: false, style: { color: "#111", weight: 2.5, opacity: 0.95, fill: false } }).addTo(hlArea);
   }
