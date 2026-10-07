@@ -9,6 +9,9 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@maplibre/maplibre-gl-leaflet@0.1.4/leaflet-maplibre-gl.js"></script>
 <style>
   html, body { margin: 0; height: 100%; font-family: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; background: #f4f4f2; color: #222; }
   #map { position: absolute; inset: 0; background: #f7f6f3; }
@@ -16,7 +19,8 @@
   /* 배경지도는 원본 그대로. 흐리게 보이는 효과는 "행정동 면" 레이어(서울 영역)가 담당:
      회색 면을 '채도' 혼합으로 덮어 색을 빼고, 그 위에 밝은 면을 반투명하게 덮음 */
   .leaflet-veilSat-pane { mix-blend-mode: saturation; }
-  #baseSwitch { margin: 0 0 0 auto; flex: none; }   /* 99번 제목 오른쪽 끝의 배경지도 버튼 */
+  #baseSwitch { margin: 0 0 0 auto; flex: none; }
+  .vecopt.off { opacity: .4; pointer-events: none; }   /* 주제도가 아닐 때 도로망·건물/한강·공원 흐리게 */   /* 99번 제목 오른쪽 끝의 배경지도 버튼 */
 
   .panel { position: absolute; z-index: 1000; top: 12px; left: 12px; width: 340px; max-width: calc(100vw - 48px);
     max-height: calc(100vh - 24px); overflow-y: auto; box-sizing: border-box;
@@ -191,11 +195,13 @@
     </div>
     </div>
     <div class="cat base-sec" id="layerCat">
-      <div class="cat-head"><button class="fold" title="펼치기/접기">▼</button><h2 class="sec-title" style="color:#4a4a4a">99.지도 레이어</h2><div class="mode" id="baseSwitch" title="배경지도"><button data-b="osm" class="on">일반 지도</button><button data-b="sat">위성사진</button></div></div>
+      <div class="cat-head"><button class="fold" title="펼치기/접기">▼</button><h2 class="sec-title" style="color:#4a4a4a">99.지도 레이어</h2><div class="mode" id="baseSwitch" title="배경지도"><button data-b="vec" class="on">주제도</button><button data-b="osm">일반 지도</button><button data-b="sat">위성사진</button></div></div>
       <div class="cat-body">
+        <label class="row vecopt"><input type="checkbox" id="chkRoadBld" checked> 도로망·건물</label>
+        <label class="row vecopt"><input type="checkbox" id="chkWaterPark" checked> 한강·공원</label>
         <label class="row"><input type="checkbox" id="chkSeoul" checked> 서울시 경계선</label>
         <label class="row"><input type="checkbox" id="chkDong" checked> 행정동 경계선</label>
-        <label class="row"><input type="checkbox" id="chkVeil" checked> 행정동 면 (배경지도 흐리게)</label>
+        <label class="row"><input type="checkbox" id="chkVeil"> 행정동 면 (배경지도 흐리게)</label>
         <label class="row"><input type="checkbox" id="chkLabel" checked> 행정동 이름</label>
       </div>
     </div>
@@ -253,11 +259,46 @@ const BASEMAPS = {
     maxZoom: 19, maxNativeZoom: 19, className: "basetiles",
     attribution: '위성사진 &copy; Esri, Maxar, Earthstar Geographics · 행정동 경계: vuski/admdongkor' }),
 };
-let basemap = BASEMAPS.osm.addTo(map);
+
+// 주제도: OpenFreeMap 벡터 지도를 차분한 색으로 칠함 (서울시 공공미술 현황도와 같은 색)
+const ROAD_MINOR = ['minor', 'service', 'tertiary', 'track'];
+const ROAD_MAJOR = ['motorway', 'trunk', 'primary', 'secondary'];
+const OMT_SRC = { omt: { type: 'vector', url: 'https://tiles.openfreemap.org/planet',
+  attribution: '&copy; <a href="https://openfreemap.org">OpenFreeMap</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · 행정동 경계: vuski/admdongkor' } };
+const ROAD_LAYERS = [
+  { id: 'road-minor-case', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 13, filter: ['in', ['get', 'class'], ['literal', ROAD_MINOR]],
+    layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#cfcac0', 'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.8, 16, 5.5, 18, 12] } },
+  { id: 'road-minor', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 14, filter: ['in', ['get', 'class'], ['literal', ROAD_MINOR]],
+    layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 14, 0.6, 16, 4, 18, 10] } },
+  { id: 'rail', type: 'line', source: 'omt', 'source-layer': 'transportation', minzoom: 12, filter: ['==', ['get', 'class'], 'rail'],
+    paint: { 'line-color': '#c4c0b8', 'line-width': 1, 'line-dasharray': [3, 2] } },
+  { id: 'road-major', type: 'line', source: 'omt', 'source-layer': 'transportation', filter: ['in', ['get', 'class'], ['literal', ROAD_MAJOR]],
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    paint: { 'line-color': ['match', ['get', 'class'], ['motorway', 'trunk'], '#a9a49a', '#bdb8ad'],
+      'line-width': ['interpolate', ['linear'], ['zoom'], 10, ['match', ['get', 'class'], ['motorway', 'trunk'], 1.2, 0.6], 16, ['match', ['get', 'class'], ['motorway', 'trunk'], 7, 5], 18, 14] } },
+];
+const VEC_STYLE = { version: 8, sources: OMT_SRC, layers: [
+  { id: 'bg', type: 'background', paint: { 'background-color': '#f1f0ec' } },
+  { id: 'park', type: 'fill', source: 'omt', 'source-layer': 'park', paint: { 'fill-color': '#cfe5c0', 'fill-opacity': 0.95 } },
+  { id: 'green', type: 'fill', source: 'omt', 'source-layer': 'landcover', filter: ['in', ['get', 'class'], ['literal', ['grass', 'wood']]], paint: { 'fill-color': '#dcecd0', 'fill-opacity': 0.85 } },
+  { id: 'water', type: 'fill', source: 'omt', 'source-layer': 'water', paint: { 'fill-color': '#e2ebf2' } },
+  { id: 'bld', type: 'fill', source: 'omt', 'source-layer': 'building', minzoom: 13.5,
+    paint: { 'fill-color': '#dcd8cf', 'fill-outline-color': '#c9c4b8', 'fill-opacity': ['interpolate', ['linear'], ['zoom'], 13.5, 0, 14.5, 1] } },
+  ...ROAD_LAYERS,
+] };
+// 색칠 지도 위에 한 번 더 얹는 선(배경 투명): 도로·철도·건물 윤곽·한강 테두리 → 색칠을 켜도 길과 강이 보이게
+const TOP_STYLE = { version: 8, sources: OMT_SRC, layers: [
+  { id: 'water-edge', type: 'line', source: 'omt', 'source-layer': 'water', paint: { 'line-color': '#9db8cc', 'line-width': 1 } },
+  { id: 'bld-edge', type: 'line', source: 'omt', 'source-layer': 'building', minzoom: 14.5, paint: { 'line-color': '#b9b3a6', 'line-width': 0.6, 'line-opacity': 0.8 } },
+  ...ROAD_LAYERS.map(l => ({ ...l, paint: { ...l.paint, 'line-opacity': 0.85 } })),
+] };
+BASEMAPS.vec = L.maplibreGL({ style: VEC_STYLE, interactive: false });
+let basemap = BASEMAPS.vec.addTo(map);
 
 // 층 순서(아래→위): 업소 수 색칠(380) < 경계선(390) < 밀집지역 원(400) < 동·원 강조선(410) < 동 이름(420) < 숙소 점(450) < 점 강조(460)
-[["veilSat", 360], ["veil", 365], ["popc", 379], ["choro", 380], ["vchoro", 382], ["urzone", 382.5], ["stzone", 384], ["zone", 386], ["dong", 390], ["labels", 420], ["vac", 440], ["pts", 450], ["clus", 470], ["vclus", 475], ["hlArea", 480], ["spider", 485], ["hlPt", 490]].forEach(([n, z]) => { map.createPane(n).style.zIndex = z; });
-["veilSat", "veil", "labels", "hlArea", "hlPt"].forEach(n => map.getPane(n).style.pointerEvents = "none");
+[["veilSat", 360], ["veil", 365], ["popc", 379], ["choro", 380], ["vchoro", 382], ["roadsTop", 383], ["urzone", 383], ["stzone", 384], ["zone", 386], ["dong", 390], ["labels", 420], ["vac", 440], ["pts", 450], ["clus", 470], ["vclus", 475], ["hlArea", 480], ["spider", 485], ["hlPt", 490]].forEach(([n, z]) => { map.createPane(n).style.zIndex = z; });
+["veilSat", "veil", "roadsTop", "labels", "hlArea", "hlPt"].forEach(n => map.getPane(n).style.pointerEvents = "none");
+const roadsTop = L.maplibreGL({ style: TOP_STYLE, pane: "roadsTop", interactive: false }).addTo(map);
 map.getPane("pts").classList.add("leaflet-pts-pane");
 ["vac", "spider"].forEach(n => map.getPane(n).classList.add("leaflet-pts-pane"));
 const svgChoro = L.svg({ pane: "choro" }), svgDong = L.svg({ pane: "dong" }), svgClus = L.svg({ pane: "clus" });
@@ -274,7 +315,7 @@ const SEOUL_RING = SEOUL_OUTLINE.map(([x, y]) => [y, x]);
 const veilLayer = L.layerGroup([
   L.polygon(SEOUL_RING, { renderer: L.svg({ pane: "veilSat" }), interactive: false, stroke: false, fillColor: "#808080", fillOpacity: 0.77 }),
   L.polygon(SEOUL_RING, { renderer: L.svg({ pane: "veil" }), interactive: false, stroke: false, fillColor: "#f7f6f3", fillOpacity: 0.41 }),
-]).addTo(map);
+]);
 // 서울 바깥: 항상 흐리게 (서울 안보다 조금 짙은 회색, 2%p 더 흐리게) → 서울에 시선이 모이도록
 const WORLD = [[-85, -180], [-85, 180], [85, 180], [85, -180]];
 L.polygon([WORLD, SEOUL_RING], { renderer: L.svg({ pane: "veilSat" }), interactive: false, stroke: false, fillColor: "#808080", fillOpacity: 0.79 }).addTo(map);
@@ -1179,12 +1220,31 @@ toggle("chkSeoul", seoulLayer);
 toggle("chkDong", dongLayer);
 toggle("chkVeil", veilLayer);
 // 배경지도 바꾸기
-document.querySelectorAll("#baseSwitch button").forEach(btn => btn.addEventListener("click", () => {
-  const next = BASEMAPS[btn.dataset.b];
-  if (next === basemap) return;
-  map.removeLayer(basemap); basemap = next.addTo(map);
-  document.querySelectorAll("#baseSwitch button").forEach(x => x.classList.toggle("on", x === btn));
-}));
+// 주제도면: 색칠 위 도로선 켜기, 행정동 면 끄기 / 일반 지도·위성사진이면: 도로선 끄기, 행정동 면 켜기
+const VEC_GROUPS = { chkRoadBld: /^(bld|road|rail)/, chkWaterPark: /^(park|green|water)/ };
+function applyVecGroups() {
+  [BASEMAPS.vec, roadsTop].forEach(lyr => {
+    const m = lyr.getMaplibreMap && lyr.getMaplibreMap();
+    if (!m) return;
+    if (!m.isStyleLoaded()) { m.once("load", applyVecGroups); return; }
+    m.getStyle().layers.forEach(l => Object.entries(VEC_GROUPS).forEach(([id, re]) => {
+      if (re.test(l.id)) m.setLayoutProperty(l.id, "visibility", document.getElementById(id).checked ? "visible" : "none");
+    }));
+  });
+}
+Object.keys(VEC_GROUPS).forEach(id => document.getElementById(id).addEventListener("change", applyVecGroups));
+function setBase(key) {
+  const next = BASEMAPS[key];
+  if (next !== basemap) { map.removeLayer(basemap); basemap = next.addTo(map); }
+  const vec = key === "vec";
+  vec ? roadsTop.addTo(map) : map.removeLayer(roadsTop);
+  const veil = document.getElementById("chkVeil");
+  if (veil.checked === vec) veil.click();
+  document.querySelectorAll(".vecopt").forEach(r => r.classList.toggle("off", !vec));
+  document.querySelectorAll("#baseSwitch button").forEach(x => x.classList.toggle("on", x.dataset.b === key));
+  if (vec) applyVecGroups();
+}
+document.querySelectorAll("#baseSwitch button").forEach(btn => btn.addEventListener("click", () => setBase(btn.dataset.b)));
 toggle("chkLabel", labelLayer, sizeLabels);
 
 const panel = document.getElementById("panel"), tb = document.getElementById("toggleBtn");
