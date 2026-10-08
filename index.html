@@ -1323,8 +1323,8 @@ document.getElementById("chkMtn").addEventListener("change", e => { trOn = e.tar
 
 
   // ================= 지하철역 입구 / 버스 정류장 (2026-10-08) =================
-  // 99번 메뉴. 체크박스 하나로 지하철·일반버스·마을버스를 함께 켜고 끔 (처음엔 꺼짐). 줌 16 이상일 때만, 지금 화면 근처 것만 그림.
-  const TRANSIT_MINZ = 16;
+  // 99번 메뉴. 체크박스 하나로 지하철·일반버스·마을버스를 함께 켜고 끔 (처음엔 꺼짐). 줌 17 이상일 때만, 지금 화면 근처 것만 그림.
+  const TRANSIT_MINZ = 17;
   const LINE_COLOR = {"1호선": "#0052A4", "2호선": "#00A84D", "3호선": "#EF7C1C", "4호선": "#00A5DE", "5호선": "#996CAC", "6호선": "#CD7C2F", "7호선": "#747F00", "8호선": "#E6186C", "9호선": "#BDB092", "경의중앙선": "#77C4A3", "공항철도": "#0090D2", "수인분당선": "#FABE00", "신분당선": "#D4003B", "우이신설선": "#B0CE18", "신림선": "#6789CA", "경춘선": "#0C8E72", "GTX-A": "#9A6292", "서해선": "#8FC31F"};
   const tIconCache = {};
   const tIcon = (letter, col) => tIconCache[letter + col] || (tIconCache[letter + col] = L.divIcon({ className: "tricon",
